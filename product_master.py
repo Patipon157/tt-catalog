@@ -7,7 +7,7 @@ Thailand Trophy - Product Master File (ต้นทุนสินค้า)
 2. ค้นหาสินค้า
 3. กรองตามหมวดหมู่
 4. คำนวณกำไร (ราคาขาย - ต้นทุน)
-5. Export เป็น CSV (เปิดใน Excel ได้)
+5. Export เป็น Excel สวยงาม (.xlsx) + CSV
 6. Import จาก CSV
 7. สรุปยอดต้นทุนรวม
 """
@@ -17,6 +17,13 @@ import csv
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog, simpledialog
 from datetime import datetime
+
+try:
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side, numbers
+    HAS_OPENPYXL = True
+except ImportError:
+    HAS_OPENPYXL = False
 
 # ===== ตั้งค่า =====
 DATA_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -107,6 +114,7 @@ class ProductMaster:
         ttk.Button(cmd_frame, text="ลบ", command=self.delete_product).pack(side="left", padx=5)
         ttk.Separator(cmd_frame, orient="vertical").pack(side="left", fill="y", padx=10)
         ttk.Button(cmd_frame, text="บันทึก", command=self.save_master_file).pack(side="left", padx=5)
+        ttk.Button(cmd_frame, text="Export Excel", command=self.export_excel).pack(side="left", padx=5)
         ttk.Button(cmd_frame, text="Export CSV...", command=self.export_csv).pack(side="left", padx=5)
         ttk.Button(cmd_frame, text="Import CSV...", command=self.import_csv).pack(side="left", padx=5)
 
@@ -218,6 +226,190 @@ class ProductMaster:
             messagebox.showinfo("Export สำเร็จ", f"Export {len(self.data)} รายการ ไปที่:\n{filepath}")
         except Exception as e:
             messagebox.showerror("Export ไม่ได้", f"{e}")
+
+    def export_excel(self):
+        """Export เป็น Excel สวยงาม (.xlsx)"""
+        if not HAS_OPENPYXL:
+            messagebox.showwarning(
+                "ต้องติดตั้ง openpyxl",
+                "กรุณาเปิด Command Prompt แล้วพิมพ์:\n\npip install openpyxl\n\nแล้วเปิดโปรแกรมใหม่",
+            )
+            return
+
+        filepath = filedialog.asksaveasfilename(
+            title="Export Excel",
+            defaultextension=".xlsx",
+            filetypes=[("Excel files", "*.xlsx"), ("All files", "*.*")],
+            initialfile=f"ProductMaster_{datetime.now().strftime('%Y%m%d')}.xlsx",
+        )
+        if not filepath:
+            return
+
+        try:
+            wb = Workbook()
+            ws = wb.active
+            ws.title = "Product Master"
+
+            # ===== สไตล์ =====
+            title_font = Font(name="Tahoma", size=14, bold=True, color="FFFFFF")
+            title_fill = PatternFill(start_color="1F4E79", end_color="1F4E79", fill_type="solid")
+
+            header_font = Font(name="Tahoma", size=10, bold=True, color="FFFFFF")
+            header_fill = PatternFill(start_color="2E75B6", end_color="2E75B6", fill_type="solid")
+
+            data_font = Font(name="Tahoma", size=10)
+            money_font = Font(name="Tahoma", size=10)
+
+            summary_font = Font(name="Tahoma", size=11, bold=True)
+            summary_fill = PatternFill(start_color="D6E4F0", end_color="D6E4F0", fill_type="solid")
+
+            profit_good_fill = PatternFill(start_color="C6EFCE", end_color="C6EFCE", fill_type="solid")
+            profit_bad_fill = PatternFill(start_color="FFC7CE", end_color="FFC7CE", fill_type="solid")
+
+            thin_border = Border(
+                left=Side(style="thin"),
+                right=Side(style="thin"),
+                top=Side(style="thin"),
+                bottom=Side(style="thin"),
+            )
+            center_align = Alignment(horizontal="center", vertical="center")
+            right_align = Alignment(horizontal="right", vertical="center")
+            left_align = Alignment(horizontal="left", vertical="center")
+
+            # ===== Title Row =====
+            ws.merge_cells("A1:L1")
+            title_cell = ws["A1"]
+            title_cell.value = f"Thailand Trophy - Product Master File"
+            title_cell.font = title_font
+            title_cell.fill = title_fill
+            title_cell.alignment = Alignment(horizontal="center", vertical="center")
+            ws.row_dimensions[1].height = 35
+
+            # ===== Date Row =====
+            ws.merge_cells("A2:L2")
+            date_cell = ws["A2"]
+            date_cell.value = f"Export Date: {datetime.now().strftime('%Y-%m-%d %H:%M')}"
+            date_cell.font = Font(name="Tahoma", size=9, italic=True)
+            date_cell.alignment = Alignment(horizontal="right")
+
+            # ===== Header Row (Row 3) =====
+            headers = [
+                "รหัสสินค้า", "ชื่อสินค้า", "หมวดหมู่", "ต้นทุน (บาท)",
+                "ราคาขาย (บาท)", "กำไร (บาท)", "Margin %",
+                "Supplier", "คงเหลือ", "หน่วย", "หมายเหตุ", "วันที่อัปเดต",
+            ]
+            col_widths = [14, 30, 14, 14, 14, 14, 12, 18, 10, 8, 20, 14]
+
+            for col_idx, (header, width) in enumerate(zip(headers, col_widths), 1):
+                cell = ws.cell(row=3, column=col_idx, value=header)
+                cell.font = header_font
+                cell.fill = header_fill
+                cell.alignment = center_align
+                cell.border = thin_border
+                ws.column_dimensions[cell.column_letter].width = width
+
+            ws.row_dimensions[3].height = 25
+
+            # ===== Data Rows =====
+            total_cost = 0
+            total_price = 0
+            data_start_row = 4
+
+            for row_idx, row in enumerate(self.data, data_start_row):
+                cost = self._to_float(row.get("ต้นทุน (บาท)", 0))
+                price = self._to_float(row.get("ราคาขาย (บาท)", 0))
+                profit = price - cost
+                margin = (profit / price * 100) if price > 0 else 0
+
+                total_cost += cost
+                total_price += price
+
+                values = [
+                    row.get("รหัสสินค้า", ""),
+                    row.get("ชื่อสินค้า", ""),
+                    row.get("หมวดหมู่", ""),
+                    cost,
+                    price,
+                    profit,
+                    margin / 100,
+                    row.get("Supplier", ""),
+                    row.get("จำนวนคงเหลือ", ""),
+                    row.get("หน่วย", ""),
+                    row.get("หมายเหตุ", ""),
+                    row.get("วันที่อัปเดต", ""),
+                ]
+
+                for col_idx, val in enumerate(values, 1):
+                    cell = ws.cell(row=row_idx, column=col_idx, value=val)
+                    cell.font = data_font
+                    cell.border = thin_border
+
+                    # จัดตำแหน่ง
+                    if col_idx in (1, 3, 9, 10, 12):
+                        cell.alignment = center_align
+                    elif col_idx in (4, 5, 6):
+                        cell.alignment = right_align
+                        cell.number_format = '#,##0'
+                    elif col_idx == 7:
+                        cell.alignment = center_align
+                        cell.number_format = '0.0%'
+                    else:
+                        cell.alignment = left_align
+
+                # สีแถวสลับ
+                if row_idx % 2 == 0:
+                    stripe_fill = PatternFill(start_color="F2F7FB", end_color="F2F7FB", fill_type="solid")
+                    for col_idx in range(1, 13):
+                        ws.cell(row=row_idx, column=col_idx).fill = stripe_fill
+
+                # สีกำไร (เขียว/แดง)
+                profit_cell = ws.cell(row=row_idx, column=6)
+                if profit > 0:
+                    profit_cell.fill = profit_good_fill
+                elif profit < 0:
+                    profit_cell.fill = profit_bad_fill
+
+            # ===== Summary Row =====
+            summary_row = data_start_row + len(self.data)
+            total_profit = total_price - total_cost
+            avg_margin = (total_profit / total_price) if total_price > 0 else 0
+
+            ws.cell(row=summary_row, column=1).value = ""
+            ws.cell(row=summary_row, column=2).value = f"TOTAL ({len(self.data)} items)"
+            ws.cell(row=summary_row, column=4).value = total_cost
+            ws.cell(row=summary_row, column=5).value = total_price
+            ws.cell(row=summary_row, column=6).value = total_profit
+            ws.cell(row=summary_row, column=7).value = avg_margin
+
+            for col_idx in range(1, 13):
+                cell = ws.cell(row=summary_row, column=col_idx)
+                cell.font = summary_font
+                cell.fill = summary_fill
+                cell.border = thin_border
+                if col_idx in (4, 5, 6):
+                    cell.number_format = '#,##0'
+                    cell.alignment = right_align
+                elif col_idx == 7:
+                    cell.number_format = '0.0%'
+                    cell.alignment = center_align
+
+            ws.row_dimensions[summary_row].height = 28
+
+            # ===== Freeze & Filter =====
+            ws.auto_filter.ref = f"A3:L{summary_row - 1}"
+            ws.freeze_panes = "A4"
+
+            # ===== Save =====
+            wb.save(filepath)
+
+            self.status_var.set(f"Export Excel -> {filepath}")
+            messagebox.showinfo(
+                "Export Excel",
+                f"Export {len(self.data)} items\n\n{filepath}",
+            )
+
+        except Exception as e:
+            messagebox.showerror("Export Error", f"{e}")
 
     def import_csv(self):
         """Import จาก CSV"""
