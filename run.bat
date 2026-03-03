@@ -1,4 +1,5 @@
 @echo off
+chcp 65001 >nul 2>&1
 title Thailand Trophy - Program Launcher
 echo ============================================
 echo   Thailand Trophy - Program Launcher
@@ -19,14 +20,14 @@ if %ERRORLEVEL% neq 0 (
     exit /b 1
 )
 
-echo  เลือกโปรแกรมที่ต้องการเปิด:
+echo  Select program to open:
 echo.
-echo  [1] Catalog Manager    - จัดการไฟล์ Catalog
-echo  [2] Product Master     - ต้นทุนสินค้า (Master File)
-echo  [3] Check Folder       - ตรวจสอบการเข้าถึง Folder
-echo  [0] ออก
+echo  [1] Catalog Manager    - Manage Catalog files
+echo  [2] Product Master     - Product Cost Master File
+echo  [3] Check Folder       - Check folder access
+echo  [0] Exit
 echo.
-set /p choice="  เลือก (1/2/3/0): "
+set /p choice="  Select (1/2/3/0): "
 
 if "%choice%"=="1" (
     echo.
